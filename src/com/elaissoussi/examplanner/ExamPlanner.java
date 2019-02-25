@@ -111,19 +111,21 @@ public class ExamPlanner {
       
     }
    
-     /* System.out.println("Max observation => " + maxNumberOfObservations);
+     /* 
+    System.out.println("Max observation => " + maxNumberOfObservations);
       for (Entry<Double, Teacher> examEntry : teachers.entrySet()) {
         Teacher t = examEntry.getValue();
         System.out.println(t.getName() + " = " + t.getObservationCount());
       }
+      
     */
     // write excel file
     
-    generateExamPlan(examsObservations, file);
+    generateExamPlan(examsObservations, teachers, maxNumberOfObservations, file);
     
   }
 
-  private static void generateExamPlan(Map<Exam, List<Observation>> examsObservations, File inputFile) throws Exception {
+  private static void generateExamPlan(Map<Exam, List<Observation>> examsObservations, Map<Double, Teacher> teachers, double maxNumberOfObservations, File inputFile) throws Exception {
     
     XSSFWorkbook workbook = new XSSFWorkbook();
     XSSFSheet sheet = workbook.createSheet("Exam Plan");
@@ -151,10 +153,27 @@ public class ExamPlanner {
       }
     }
     
+    // Generate observation statistics
+    XSSFSheet observationSheet = workbook.createSheet("Observations statistics");
+    int rowStatsNum = 0;
+    Row maxStatsRow = observationSheet.createRow(rowStatsNum++);
+    Cell statsCell = maxStatsRow.createCell(0);
+    statsCell.setCellValue("Max Observations = " + maxNumberOfObservations);
+    
+    for (Entry<Double, Teacher> examEntry : teachers.entrySet()) {
+      Teacher teacher = examEntry.getValue();
+      Row teacherStatsRow = observationSheet.createRow(rowStatsNum++);
+      
+      Cell teacherStatsCell1 = teacherStatsRow.createCell(0);
+      teacherStatsCell1.setCellValue(teacher.getName());
+      
+      Cell teacherStatsCell2 = teacherStatsRow.createCell(1);
+      teacherStatsCell2.setCellValue(teacher.getObservationCount());
+    }
+      
     FileOutputStream outputStream = new FileOutputStream(inputFile.getParent( )+"/plan.xlsx");
     workbook.write(outputStream);
     workbook.close();
-    
   }
   
   private static boolean isAlreadyObserver(List<Observation> observations, Teacher teacher) {
