@@ -10,6 +10,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -27,10 +28,12 @@ public class ExamPlanner {
     
   public static void main(String[] args) throws Exception {
 
-    final String inputFile = args[0];
-
-    File file = new File(inputFile);
-
+    String inputFilePath = "./exam-plan.xlsx";
+    
+    File file = new File(inputFilePath);
+    
+    System.out.println("### 1- start generating exam plan ###");
+    
     // Load data
     Map<Double, Material> materials = loadMaterials(file);
 
@@ -42,14 +45,16 @@ public class ExamPlanner {
     Map<Exam, List<Observation>> examsObservations = new HashMap<>();
     
     // Compute max Number Of Observations
-    double numberOfRomms = 0;
+    double totalRequiredExamRooms = 0;
     for (Entry<Double, Exam> examEntry : exams.entrySet()) {
       Exam exam = examEntry.getValue();
-      numberOfRomms += exam.getNumberOfRomms();
+      // get of total required class by exam
+      totalRequiredExamRooms += exam.getNumberOfRomms();
     }
-
-    double maxNumberOfObservations = Math.ceil(numberOfRomms / teachers.size())*2;
-
+    
+    // Max total Observations for teacher
+    double maxTotalObservations = Math.ceil(totalRequiredExamRooms / teachers.size()) * 2 ;
+    
     // Generate plan
     for (Entry<Double, Exam> examEntry : exams.entrySet()) {
 
@@ -61,25 +66,27 @@ public class ExamPlanner {
       List<Teacher> teachersGroup1 = getTeachersFor(1, material, teachers);
       List<Teacher> teachersGroup2 = getTeachersFor(2, material, teachers);
 
-      // Max Teacher Group
+      // Max Teacher Group, to get max couple of teachers by exam
       double maxTeacherGroup = Math.min(teachersGroup1.size(), teachersGroup2.size());
 
-      // Max Teacher Observations
+      // Max Teacher Observations by exam
       double maxObservations = Math.min(maxTeacherGroup, exam.getNumberOfRomms());
-
+      
       // list of observations
       List<Observation> observations = new ArrayList<>();
 
       // Generate exam observations 
       for (Teacher teacher1 : teachersGroup1) {
         
-        if (!isAlreadyObserver(observations, teacher1)
+        if (!isAlreadyObserverInSameExamGroupe(examsObservations, exam, teacher1)
+            && !isAlreadyObserverInCurrentExam(observations, teacher1)
             && observations.size() < maxObservations 
-            && teacher1.getObservationCount() < maxNumberOfObservations) {
+            && teacher1.getObservationCount() < maxTotalObservations) {
 
           for (Teacher teacher2 : teachersGroup2) {
-            if (!isAlreadyObserver(observations, teacher2) 
-                && teacher2.getObservationCount() < maxNumberOfObservations) {
+            if (!isAlreadyObserverInSameExamGroupe(examsObservations, exam, teacher2)
+                && !isAlreadyObserverInCurrentExam(observations, teacher2)
+                && teacher2.getObservationCount() < maxTotalObservations) {
               
               // increment number of observation
               teacher1.setObservationCount(teacher1.getObservationCount() + 1 );
@@ -100,29 +107,13 @@ public class ExamPlanner {
       }
       
       examsObservations.put(exam, observations);
-      
-      /*System.out.println("Exam => " + exam.getName());
-      System.out.println("Exam => " + exam.getNumberOfRomms());
-
-      for (Observation obs : observations) {
-        System.out.println(obs);
-      }
-      */
-      
     }
-   
-     /* 
-    System.out.println("Max observation => " + maxNumberOfObservations);
-      for (Entry<Double, Teacher> examEntry : teachers.entrySet()) {
-        Teacher t = examEntry.getValue();
-        System.out.println(t.getName() + " = " + t.getObservationCount());
-      }
-      
-    */
-    // write excel file
+  
+    generateExamPlan(examsObservations, teachers, maxTotalObservations, file);
     
-    generateExamPlan(examsObservations, teachers, maxNumberOfObservations, file);
-    
+    System.out.println("### 2- End generating exam plan ###");
+    System.out.println("### 3- open plan.xlsx ###");
+
   }
 
   private static void generateExamPlan(Map<Exam, List<Observation>> examsObservations, Map<Double, Teacher> teachers, double maxNumberOfObservations, File inputFile) throws Exception {
@@ -176,9 +167,10 @@ public class ExamPlanner {
     workbook.close();
   }
   
-  private static boolean isAlreadyObserver(List<Observation> observations, Teacher teacher) {
+  private static boolean isAlreadyObserverInCurrentExam(List<Observation> observations, Teacher teacher) {
     
     for (Observation observation : observations) {
+      
       Teacher observer1 = observation.getObserver1();
       Teacher observer2 = observation.getObserver2();
       if(observer1.equals(teacher) || observer2.equals(teacher)) {
@@ -186,6 +178,27 @@ public class ExamPlanner {
       }
     }
     return false; 
+  }
+  
+  private static final boolean isAlreadyObserverInSameExamGroupe(Map<Exam, List<Observation>> examsObservations, Exam exam, Teacher teacher) {
+    
+    // get exams set
+    Set<Exam> exams = examsObservations.keySet();
+    
+    for (Exam exm : exams) {
+      // the current exam has the same group of an exam in the list
+      if(exm.getGroup() == exam.getGroup()) {
+        // get observations of the exam
+        List<Observation> observations = examsObservations.get(exm);
+        
+        if(isAlreadyObserverInCurrentExam(observations, teacher)) {
+          return true;
+        }
+        
+      }
+    }
+    
+    return false;
   }
   
   private static List<Teacher> getTeachersFor(double groupe, Material material,
@@ -259,7 +272,7 @@ public class ExamPlanner {
 
       Row currentRow = examIterator.next();
       Exam exam = new Exam();
-
+      
       double examId = currentRow.getCell(0).getNumericCellValue();
       exam.setId(examId);
 
@@ -268,11 +281,14 @@ public class ExamPlanner {
       double materialId = currentRow.getCell(2).getNumericCellValue();
       exam.setMaterial(materials.get(materialId));
 
-
+      // required rooms for this exam
       double numberOfStudents = currentRow.getCell(3).getNumericCellValue();
       double numberOfRomms = Math.ceil(numberOfStudents / STUDENT_NUMBER_ROOM);
       exam.setNumberOfRomms(numberOfRomms);
-
+      
+      double examGroupe = currentRow.getCell(4).getNumericCellValue();
+      exam.setGroup(examGroupe);
+      
       exams.put(examId, exam);
     }
 

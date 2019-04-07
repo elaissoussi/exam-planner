@@ -6,7 +6,7 @@ public class Exam {
   private String name ; 
   private Material material; 
   private double numberOfRomms;
-  
+  private double group;
   
   public String getName() {
     return name;
@@ -31,6 +31,12 @@ public class Exam {
   }
   public void setNumberOfRomms(double numberOfRomms) {
     this.numberOfRomms = numberOfRomms;
+  }
+  public double getGroup() {
+    return group;
+  }
+  public void setGroup(double group) {
+    this.group = group;
   }
  
 }
